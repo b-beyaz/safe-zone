@@ -17,7 +17,7 @@ jobs:
       policy_api: ${{ steps.changes.outputs.policy_api }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -72,10 +72,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@v4
         with:
           go-version-file: go.mod
 
@@ -95,10 +95,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@v4
         with:
           go-version-file: go.mod
 
@@ -139,10 +139,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@v4
         with:
           go-version-file: go.mod
 
@@ -210,10 +210,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@v4
         with:
           go-version-file: go.mod
 
@@ -284,10 +284,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@v4
         with:
           # This job builds the root server first. The root module's Go version
           # also satisfies the CLI submodule's lower minimum version.
@@ -332,10 +332,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@v4
         with:
           go-version-file: go.mod
 
