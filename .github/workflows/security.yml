@@ -144,8 +144,9 @@ jobs:
         id: cache-period
         run: echo "period=$(date +'%Y-W%V')" >> "$GITHUB_OUTPUT"
 
-      - name: Cache OWASP Dependency-Check NVD database
-        uses: actions/cache@v4
+      - name: Restore OWASP Dependency-Check cache
+        id: cache-restore
+        uses: actions/cache/restore@v4
         with:
           path: ~/.owasp-dc-data
           key: owasp-dc-data-${{ steps.cache-period.outputs.period }}
@@ -189,6 +190,7 @@ jobs:
           unzip -q "${RUNNER_TEMP}/dc.zip" -d "${RUNNER_TEMP}/dependency-check-cli"
 
       - name: Run OWASP Dependency-Check
+        id: dc-scan
         continue-on-error: true
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
@@ -204,6 +206,13 @@ jobs:
             --out reports \
             --data ~/.owasp-dc-data \
             ${NVD_API_KEY:+--nvdApiKey "$NVD_API_KEY"}
+
+      - name: Save OWASP Dependency-Check cache
+        if: always() && steps.dc-scan.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.owasp-dc-data
+          key: owasp-dc-data-${{ steps.cache-period.outputs.period }}
 
       - name: Upload Dependency-Check SARIF to Security tab
         continue-on-error: true
