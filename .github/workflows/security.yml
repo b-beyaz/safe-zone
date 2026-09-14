@@ -4,11 +4,9 @@ on:
   push:
     branches:
       - main
-      - feature/vulnebility
   pull_request:
     branches:
       - main
-      - feature/vulnebility
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch:
