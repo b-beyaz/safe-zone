@@ -1,0 +1,90 @@
+version: 2
+updates:
+  # Root Go module (main application: api, tsz-ext-proc, tsz-controller, tsz-policy, mocks)
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      patch-and-minor:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Go SDK module (published, used by external consumers)
+  - package-ecosystem: "gomod"
+    directory: "/pkg/tszclient-go"
+    schedule:
+      interval: "weekly"
+    groups:
+      patch-and-minor:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # CLI module
+  - package-ecosystem: "gomod"
+    directory: "/pkg/tsz-cli"
+    schedule:
+      interval: "weekly"
+    groups:
+      patch-and-minor:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Go SDK usage example
+  - package-ecosystem: "gomod"
+    directory: "/examples/go-sdk-demo"
+    schedule:
+      interval: "weekly"
+    groups:
+      patch-and-minor:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Python SDK (published, root-level pyproject.toml)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      patch-and-minor:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Python red-team/example tooling
+  - package-ecosystem: "pip"
+    directory: "/examples/llm-data-exfiltration-redteam-python"
+    schedule:
+      interval: "weekly"
+    groups:
+      patch-and-minor:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # CI/CD workflow actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      patch-and-minor:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Container base images
+  - package-ecosystem: "docker"
+    directory: "/deployment/docker"
+    schedule:
+      interval: "weekly"
+    groups:
+      patch-and-minor:
+        update-types:
+          - "minor"
+          - "patch"
