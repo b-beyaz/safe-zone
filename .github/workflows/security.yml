@@ -3,10 +3,12 @@ name: Security Scanning
 on:
   push:
     branches:
-      - main
+      - main 
+      - feature/vulnebility
   pull_request:
     branches:
-      - main
+      - main 
+      - feature/vulnebility
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch:
@@ -188,7 +190,7 @@ jobs:
             --out reports \
             --data ~/.owasp-dc-data \
             ${NVD_API_KEY:+--nvdApiKey "$NVD_API_KEY"}
-            
+
       - name: Upload Dependency-Check SARIF to Security tab
         continue-on-error: true
         if: always()
