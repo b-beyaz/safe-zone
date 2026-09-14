@@ -3,11 +3,11 @@ name: Security Scanning
 on:
   push:
     branches:
-      - main 
+      - main
       - feature/vulnebility
   pull_request:
     branches:
-      - main 
+      - main
       - feature/vulnebility
   schedule:
     - cron: "0 6 * * 1"
@@ -52,7 +52,7 @@ jobs:
         run: |
           go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 \
             -format sarif ./... > govulncheck-report.sarif || true
-      
+
       - name: Upload govulncheck SARIF to Security tab
         continue-on-error: true
         if: always()
@@ -112,7 +112,7 @@ jobs:
           path: gosec-report.sarif
           retention-days: 30
 
-    owasp-dependency-check:
+  owasp-dependency-check:
     name: OWASP Dependency-Check
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -245,7 +245,7 @@ jobs:
           format: table
           output: trivy-report.txt
           exit-code: ${{ env.ENFORCE_CONTAINER_SCAN == 'true' && '1' || '0' }}
- 
+
       - name: Upload Trivy report
         if: always()
         uses: actions/upload-artifact@v7
