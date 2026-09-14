@@ -112,7 +112,7 @@ jobs:
           path: gosec-report.sarif
           retention-days: 30
 
-  owasp-dependency-check:
+    owasp-dependency-check:
     name: OWASP Dependency-Check
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -124,11 +124,12 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-      
+
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+
       - name: Debug NVD key presence
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
@@ -139,11 +140,15 @@ jobs:
             echo "NVD_API_KEY length: ${#NVD_API_KEY}"
           fi
 
+      - name: Get cache period
+        id: cache-period
+        run: echo "period=$(date +'%Y-W%V')" >> "$GITHUB_OUTPUT"
+
       - name: Cache OWASP Dependency-Check NVD database
         uses: actions/cache@v4
         with:
           path: ~/.owasp-dc-data
-          key: owasp-dc-data-${{ github.run_id }}
+          key: owasp-dc-data-${{ steps.cache-period.outputs.period }}
           restore-keys: |
             owasp-dc-data-
 
@@ -182,7 +187,7 @@ jobs:
           fi
 
           unzip -q "${RUNNER_TEMP}/dc.zip" -d "${RUNNER_TEMP}/dependency-check-cli"
-      
+
       - name: Run OWASP Dependency-Check
         continue-on-error: true
         env:
