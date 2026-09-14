@@ -72,7 +72,7 @@ jobs:
   gosec:
     name: Run gosec
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
       security-events: write
