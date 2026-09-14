@@ -140,7 +140,10 @@ jobs:
 
       - name: Get cache period
         id: cache-period
-        run: echo "period=$(date +'%Y-W%V')" >> "$GITHUB_OUTPUT"
+        run: |
+          PERIOD=$(date +'%Y-W%V')
+          echo "period=$PERIOD" >> "$GITHUB_OUTPUT"
+          echo "Computed cache period: $PERIOD"
 
       - name: Restore OWASP Dependency-Check cache
         id: cache-restore
@@ -205,8 +208,19 @@ jobs:
             --data ~/.owasp-dc-data \
             ${NVD_API_KEY:+--nvdApiKey "$NVD_API_KEY"}
 
+      - name: Check OWASP data was actually populated
+        id: dc-data-check
+        if: always()
+        run: |
+          SIZE=$(du -sb ~/.owasp-dc-data 2>/dev/null | cut -f1 || echo 0)
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "OWASP data dir size: ${SIZE} bytes"
+
       - name: Save OWASP Dependency-Check cache
-        if: always() && steps.dc-scan.outcome == 'success'
+        if: >-
+          always() &&
+          steps.dc-scan.outcome == 'success' &&
+          steps.dc-data-check.outputs.size > 50000000
         uses: actions/cache/save@v4
         with:
           path: ~/.owasp-dc-data
