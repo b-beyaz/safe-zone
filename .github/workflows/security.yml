@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/vulnebility
   pull_request:
     branches:
       - main
@@ -117,6 +118,9 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    concurrency:
+      group: owasp-dependency-check-${{ github.ref }}
+      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v7
