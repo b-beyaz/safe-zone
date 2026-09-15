@@ -1,2 +1,2 @@
-tszclient-py>=0.1.0
+tszclient-py>=1.0.0
 python-dotenv
