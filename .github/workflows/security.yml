@@ -43,17 +43,17 @@ jobs:
           go-version-file: go.mod
 
       - name: Run govulncheck
-        continue-on-error: true
+        continue-on-error: false
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
       - name: Generate govulncheck SARIF report
-        continue-on-error: true
+        continue-on-error: false
         run: |
           go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 \
             -format sarif ./... > govulncheck-report.sarif || true
 
       - name: Upload govulncheck SARIF to Security tab
-        continue-on-error: true
+        continue-on-error: false
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
@@ -87,7 +87,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Run gosec
-        continue-on-error: true
+        continue-on-error: false
         run: |
           go run github.com/securego/gosec/v2/cmd/gosec@v2.29.0 \
             -no-fail \
@@ -96,7 +96,7 @@ jobs:
             ./...
 
       - name: Upload gosec SARIF to Security tab
-        continue-on-error: true
+        continue-on-error: false
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
@@ -196,7 +196,7 @@ jobs:
 
       - name: Run OWASP Dependency-Check
         id: dc-scan
-        continue-on-error: true
+        continue-on-error: false
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
@@ -207,6 +207,7 @@ jobs:
             --exclude "**/.git/**" \
             --scan . \
             --format ALL \
+            --nvdApiDelay 6000 \
             --project "go-security-test" \
             --out reports \
             --data ~/.owasp-dc-data \
@@ -231,7 +232,7 @@ jobs:
           key: owasp-dc-data-${{ steps.cache-period.outputs.period }}
 
       - name: Upload Dependency-Check SARIF to Security tab
-        continue-on-error: true
+        continue-on-error: false
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
