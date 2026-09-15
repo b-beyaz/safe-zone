@@ -22,6 +22,7 @@ permissions:
 env:
   ENFORCE_CONTAINER_SCAN: "true"
   DC_VERSION: "12.1.0"
+  DC_ZIP_SHA256: "0e5ba6ae58e753d5841048c6c8e495dbc4c7a4ea921a2b14daeac65195700532"
 
 jobs:
   govulncheck:
@@ -42,12 +43,10 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # Blocking step: bulgu varsa job gercekten fail eder (SLA politikasi burada uygulaniyor)
       - name: Run govulncheck
         continue-on-error: false
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
-      # Housekeeping: raporlama amacli, ayri bir fail nedeni yaratmasin
       - name: Generate govulncheck SARIF report
         if: always()
         continue-on-error: true
@@ -90,8 +89,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # Blocking step: govulncheck ile tutarli olsun diye -no-fail kaldirildi.
-      # Bulgu varsa gosec de non-zero doner ve job fail eder.
       - name: Run gosec
         continue-on-error: false
         run: |
@@ -177,35 +174,20 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/dependency-check-cli"
           curl -sSfL -o "${RUNNER_TEMP}/dc.zip" "$DOWNLOAD_URL"
 
-          ASSET_ID=$(curl -sSf \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/jeremylong/DependencyCheck/releases/tags/v${DC_VERSION}" \
-            | jq -r --arg name "$ASSET_NAME" '.assets[] | select(.name==$name) | .id')
-
-          if [ -n "${ASSET_ID}" ] && [ "${ASSET_ID}" != "null" ]; then
-            EXPECTED_DIGEST=$(curl -sSf \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/jeremylong/DependencyCheck/releases/assets/${ASSET_ID}" \
-              | jq -r '.digest // empty')
-
-            if [ -n "${EXPECTED_DIGEST}" ]; then
-              ACTUAL_DIGEST="sha256:$(sha256sum "${RUNNER_TEMP}/dc.zip" | cut -d' ' -f1)"
-              if [ "${EXPECTED_DIGEST}" != "${ACTUAL_DIGEST}" ]; then
-                echo "::error::Checksum mismatch for ${ASSET_NAME}: expected ${EXPECTED_DIGEST}, got ${ACTUAL_DIGEST}"
-                exit 1
-              fi
-              echo "Checksum verified: ${ACTUAL_DIGEST}"
-            else
-              echo "::warning::GitHub API returned no digest for this asset; skipping integrity check"
-            fi
-          else
-            echo "::warning::Could not resolve asset id for ${ASSET_NAME}; skipping integrity check"
+          if [ -z "${DC_ZIP_SHA256:-}" ]; then
+            echo "::error::DC_ZIP_SHA256 is not set for DC_VERSION=${DC_VERSION}"
+            exit 1
           fi
+
+          ACTUAL_DIGEST="$(sha256sum "${RUNNER_TEMP}/dc.zip" | cut -d' ' -f1)"
+          if [ "${DC_ZIP_SHA256}" != "${ACTUAL_DIGEST}" ]; then
+            echo "::error::Checksum mismatch for ${ASSET_NAME}: expected ${DC_ZIP_SHA256}, got ${ACTUAL_DIGEST}"
+            exit 1
+          fi
+          echo "Checksum verified: ${ACTUAL_DIGEST}"
 
           unzip -q "${RUNNER_TEMP}/dc.zip" -d "${RUNNER_TEMP}/dependency-check-cli"
 
-      # Blocking step: gercek bulgu ya da kalici hata olursa fail eder.
-      # NVD'nin gecici 524/503 gibi hatalarinda 3 deneme yaparak false-positive block'u onler.
       - name: Run OWASP Dependency-Check
         id: dc-scan
         continue-on-error: false
@@ -252,7 +234,6 @@ jobs:
       - name: Save OWASP Dependency-Check cache
         if: >-
           always() &&
-          steps.dc-scan.outcome == 'success' &&
           steps.dc-data-check.outputs.size > 50000000
         uses: actions/cache/save@v4
         with:
