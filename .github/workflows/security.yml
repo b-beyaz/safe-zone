@@ -42,19 +42,22 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # Blocking step: bulgu varsa job gercekten fail eder (SLA politikasi burada uygulaniyor)
       - name: Run govulncheck
         continue-on-error: false
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
+      # Housekeeping: raporlama amacli, ayri bir fail nedeni yaratmasin
       - name: Generate govulncheck SARIF report
-        continue-on-error: false
+        if: always()
+        continue-on-error: true
         run: |
           go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 \
             -format sarif ./... > govulncheck-report.sarif || true
 
       - name: Upload govulncheck SARIF to Security tab
-        continue-on-error: false
         if: always()
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: govulncheck-report.sarif
@@ -62,6 +65,7 @@ jobs:
 
       - name: Upload govulncheck report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: govulncheck-report
@@ -86,17 +90,18 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # Blocking step: govulncheck ile tutarli olsun diye -no-fail kaldirildi.
+      # Bulgu varsa gosec de non-zero doner ve job fail eder.
       - name: Run gosec
         continue-on-error: false
         run: |
           go run github.com/securego/gosec/v2/cmd/gosec@v2.29.0 \
-            -no-fail \
             -fmt=json -out=gosec-report.json \
             -fmt=sarif -out=gosec-report.sarif \
             ./...
 
       - name: Upload gosec SARIF to Security tab
-        continue-on-error: false
+        continue-on-error: true
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
@@ -105,6 +110,7 @@ jobs:
 
       - name: Upload gosec report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: gosec-report
@@ -114,7 +120,7 @@ jobs:
   owasp-dependency-check:
     name: OWASP Dependency-Check
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
       security-events: write
@@ -194,6 +200,8 @@ jobs:
 
           unzip -q "${RUNNER_TEMP}/dc.zip" -d "${RUNNER_TEMP}/dependency-check-cli"
 
+      # Blocking step: gercek bulgu ya da kalici hata olursa fail eder.
+      # NVD'nin gecici 524/503 gibi hatalarinda 3 deneme yaparak false-positive block'u onler.
       - name: Run OWASP Dependency-Check
         id: dc-scan
         continue-on-error: false
@@ -201,21 +209,36 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           mkdir -p reports ~/.owasp-dc-data
-          "${RUNNER_TEMP}/dependency-check-cli/dependency-check/bin/dependency-check.sh" \
-            --enableExperimental \
-            --disableOssIndex \
-            --exclude "**/.git/**" \
-            --scan . \
-            --format ALL \
-            --nvdApiDelay 6000 \
-            --project "go-security-test" \
-            --out reports \
-            --data ~/.owasp-dc-data \
-            ${NVD_API_KEY:+--nvdApiKey "$NVD_API_KEY"}
+          set +e
+          for attempt in 1 2 3; do
+            echo "=== Dependency-Check attempt ${attempt}/3 ==="
+            "${RUNNER_TEMP}/dependency-check-cli/dependency-check/bin/dependency-check.sh" \
+              --enableExperimental \
+              --disableOssIndex \
+              --exclude "**/.git/**" \
+              --scan . \
+              --format ALL \
+              --nvdApiDelay 6000 \
+              --project "go-security-test" \
+              --out reports \
+              --data ~/.owasp-dc-data \
+              ${NVD_API_KEY:+--nvdApiKey "$NVD_API_KEY"}
+            STATUS=$?
+            if [ $STATUS -eq 0 ]; then
+              exit 0
+            fi
+            echo "::warning::Attempt ${attempt} failed with exit code ${STATUS}"
+            if [ $attempt -lt 3 ]; then
+              echo "Retrying in 30s..."
+              sleep 30
+            fi
+          done
+          exit $STATUS
 
       - name: Check OWASP data was actually populated
         id: dc-data-check
         if: always()
+        continue-on-error: true
         run: |
           SIZE=$(du -sb ~/.owasp-dc-data 2>/dev/null | cut -f1 || echo 0)
           echo "size=$SIZE" >> "$GITHUB_OUTPUT"
@@ -232,7 +255,7 @@ jobs:
           key: owasp-dc-data-${{ steps.cache-period.outputs.period }}
 
       - name: Upload Dependency-Check SARIF to Security tab
-        continue-on-error: false
+        continue-on-error: true
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
@@ -241,6 +264,7 @@ jobs:
 
       - name: Upload Dependency-Check report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: owasp-dependency-check-report
@@ -274,6 +298,7 @@ jobs:
 
       - name: Upload Trivy report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: trivy-report
