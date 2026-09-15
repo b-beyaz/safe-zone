@@ -1,68 +1,61 @@
 version: 2
 updates:
-  # Root Go module (main application: api, tsz-ext-proc, tsz-controller, tsz-policy, mocks)
+  # Internal Go modules (root app: api, tsz-ext-proc, tsz-controller, tsz-policy,
+  # mocks; plus the CLI and the SDK usage example). Merged into one entry so
+  # compatible version bumps land in a single PR instead of separate ones per
+  # directory.
   - package-ecosystem: "gomod"
-    directory: "/"
+    directories:
+      - "/"
+      - "/pkg/tsz-cli"
+      - "/examples/go-sdk-demo"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
     groups:
       patch-and-minor:
+        applies-to: version-updates
         update-types:
           - "minor"
           - "patch"
 
-  # Go SDK module (published, used by external consumers)
+  # Go SDK module (published, used by external consumers). Kept separate from
+  # the internal modules above so its version bumps stay independently
+  # trackable/releasable and aren't mixed into internal app changes.
   - package-ecosystem: "gomod"
     directory: "/pkg/tszclient-go"
     schedule:
       interval: "weekly"
     groups:
       patch-and-minor:
+        applies-to: version-updates
         update-types:
           - "minor"
           - "patch"
 
-  # CLI module
-  - package-ecosystem: "gomod"
-    directory: "/pkg/tsz-cli"
-    schedule:
-      interval: "weekly"
-    groups:
-      patch-and-minor:
-        update-types:
-          - "minor"
-          - "patch"
-
-  # Go SDK usage example
-  - package-ecosystem: "gomod"
-    directory: "/examples/go-sdk-demo"
-    schedule:
-      interval: "weekly"
-    groups:
-      patch-and-minor:
-        update-types:
-          - "minor"
-          - "patch"
-
-  # Python SDK (published, root-level pyproject.toml)
+  # Python packages (root pyproject.toml + red-team/example tooling). Merged
+  # into one entry for the same reason as the Go modules above.
   - package-ecosystem: "pip"
-    directory: "/"
+    directories:
+      - "/"
+      - "/examples/llm-data-exfiltration-redteam-python"
     schedule:
       interval: "weekly"
     groups:
       patch-and-minor:
+        applies-to: version-updates
         update-types:
           - "minor"
           - "patch"
 
-  # Python red-team/example tooling
-  - package-ecosystem: "pip"
-    directory: "/examples/llm-data-exfiltration-redteam-python"
+  # Web frontend (npm) — previously missing; this is where react-router/nanoid
+  # findings came from during OWASP Dependency-Check runs.
+  - package-ecosystem: "npm"
+    directory: "/web"
     schedule:
       interval: "weekly"
     groups:
       patch-and-minor:
+        applies-to: version-updates
         update-types:
           - "minor"
           - "patch"
@@ -74,6 +67,7 @@ updates:
       interval: "weekly"
     groups:
       patch-and-minor:
+        applies-to: version-updates
         update-types:
           - "minor"
           - "patch"
@@ -85,6 +79,7 @@ updates:
       interval: "weekly"
     groups:
       patch-and-minor:
+        applies-to: version-updates
         update-types:
           - "minor"
           - "patch"

@@ -19,8 +19,9 @@ permissions:
   contents: read
 
 env:
-  ENFORCE_CONTAINER_SCAN: "false"
+  ENFORCE_CONTAINER_SCAN: "true"
   DC_VERSION: "12.1.0"
+  DC_ZIP_SHA256: "0e5ba6ae58e753d5841048c6c8e495dbc4c7a4ea921a2b14daeac65195700532"
 
 jobs:
   govulncheck:
@@ -42,18 +43,19 @@ jobs:
           go-version-file: go.mod
 
       - name: Run govulncheck
-        continue-on-error: true
+        continue-on-error: false
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
       - name: Generate govulncheck SARIF report
+        if: always()
         continue-on-error: true
         run: |
           go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 \
             -format sarif ./... > govulncheck-report.sarif || true
 
       - name: Upload govulncheck SARIF to Security tab
-        continue-on-error: true
         if: always()
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: govulncheck-report.sarif
@@ -61,6 +63,7 @@ jobs:
 
       - name: Upload govulncheck report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: govulncheck-report
@@ -86,10 +89,9 @@ jobs:
           go-version-file: go.mod
 
       - name: Run gosec
-        continue-on-error: true
+        continue-on-error: false
         run: |
           go run github.com/securego/gosec/v2/cmd/gosec@v2.29.0 \
-            -no-fail \
             -fmt=json -out=gosec-report.json \
             -fmt=sarif -out=gosec-report.sarif \
             ./...
@@ -104,6 +106,7 @@ jobs:
 
       - name: Upload gosec report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: gosec-report
@@ -113,15 +116,22 @@ jobs:
   owasp-dependency-check:
     name: OWASP Dependency-Check
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
       security-events: write
+    concurrency:
+      group: owasp-dependency-check-${{ github.ref }}
+      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: Install web dependencies for scanning
+        working-directory: web
+        run: npm ci
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -163,54 +173,63 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/dependency-check-cli"
           curl -sSfL -o "${RUNNER_TEMP}/dc.zip" "$DOWNLOAD_URL"
 
-          ASSET_ID=$(curl -sSf \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/jeremylong/DependencyCheck/releases/tags/v${DC_VERSION}" \
-            | jq -r --arg name "$ASSET_NAME" '.assets[] | select(.name==$name) | .id')
-
-          if [ -n "${ASSET_ID}" ] && [ "${ASSET_ID}" != "null" ]; then
-            EXPECTED_DIGEST=$(curl -sSf \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/jeremylong/DependencyCheck/releases/assets/${ASSET_ID}" \
-              | jq -r '.digest // empty')
-
-            if [ -n "${EXPECTED_DIGEST}" ]; then
-              ACTUAL_DIGEST="sha256:$(sha256sum "${RUNNER_TEMP}/dc.zip" | cut -d' ' -f1)"
-              if [ "${EXPECTED_DIGEST}" != "${ACTUAL_DIGEST}" ]; then
-                echo "::error::Checksum mismatch for ${ASSET_NAME}: expected ${EXPECTED_DIGEST}, got ${ACTUAL_DIGEST}"
-                exit 1
-              fi
-              echo "Checksum verified: ${ACTUAL_DIGEST}"
-            else
-              echo "::warning::GitHub API returned no digest for this asset; skipping integrity check"
-            fi
-          else
-            echo "::warning::Could not resolve asset id for ${ASSET_NAME}; skipping integrity check"
+          if [ -z "${DC_ZIP_SHA256:-}" ]; then
+            echo "::error::DC_ZIP_SHA256 is not set for DC_VERSION=${DC_VERSION}"
+            exit 1
           fi
+
+          ACTUAL_DIGEST="$(sha256sum "${RUNNER_TEMP}/dc.zip" | cut -d' ' -f1)"
+          if [ "${DC_ZIP_SHA256}" != "${ACTUAL_DIGEST}" ]; then
+            echo "::error::Checksum mismatch for ${ASSET_NAME}: expected ${DC_ZIP_SHA256}, got ${ACTUAL_DIGEST}"
+            exit 1
+          fi
+          echo "Checksum verified: ${ACTUAL_DIGEST}"
 
           unzip -q "${RUNNER_TEMP}/dc.zip" -d "${RUNNER_TEMP}/dependency-check-cli"
 
       - name: Run OWASP Dependency-Check
         id: dc-scan
-        continue-on-error: true
+        continue-on-error: false
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           mkdir -p reports ~/.owasp-dc-data
-          "${RUNNER_TEMP}/dependency-check-cli/dependency-check/bin/dependency-check.sh" \
-            --enableExperimental \
-            --disableOssIndex \
-            --exclude "**/.git/**" \
-            --scan . \
-            --format ALL \
-            --project "go-security-test" \
-            --out reports \
-            --data ~/.owasp-dc-data \
-            ${NVD_API_KEY:+--nvdApiKey "$NVD_API_KEY"}
+          set +e
+          for attempt in 1 2 3; do
+            echo "=== Dependency-Check attempt ${attempt}/3 ==="
+            OUTPUT=$("${RUNNER_TEMP}/dependency-check-cli/dependency-check/bin/dependency-check.sh" \
+              --enableExperimental \
+              --disableOssIndex \
+              --exclude "**/.git/**" \
+              --scan . \
+              --format ALL \
+              --nvdApiDelay 6000 \
+              --project "go-security-test" \
+              --out reports \
+              --data ~/.owasp-dc-data \
+              --failOnCVSS 7 \
+              ${NVD_API_KEY:+--nvdApiKey "$NVD_API_KEY"} 2>&1)
+            STATUS=$?
+            echo "$OUTPUT"
+            if [ $STATUS -eq 0 ]; then
+              exit 0
+            fi
+            if echo "$OUTPUT" | grep -q "vulnerabilities that have a CVSS score greater than or equal to"; then
+              echo "::error::Genuine CVSS threshold breach - not retrying"
+              exit $STATUS
+            fi
+            echo "::warning::Attempt ${attempt} failed with exit code ${STATUS}"
+            if [ $attempt -lt 3 ]; then
+              echo "Retrying in 30s..."
+              sleep 30
+            fi
+          done
+          exit $STATUS
 
       - name: Check OWASP data was actually populated
         id: dc-data-check
         if: always()
+        continue-on-error: true
         run: |
           SIZE=$(du -sb ~/.owasp-dc-data 2>/dev/null | cut -f1 || echo 0)
           echo "size=$SIZE" >> "$GITHUB_OUTPUT"
@@ -219,7 +238,6 @@ jobs:
       - name: Save OWASP Dependency-Check cache
         if: >-
           always() &&
-          steps.dc-scan.outcome == 'success' &&
           steps.dc-data-check.outputs.size > 50000000
         uses: actions/cache/save@v4
         with:
@@ -236,6 +254,7 @@ jobs:
 
       - name: Upload Dependency-Check report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: owasp-dependency-check-report
@@ -258,7 +277,7 @@ jobs:
         run: docker build -t thyris-sz:scan -f deployment/docker/Dockerfile .
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: thyris-sz:scan
           severity: HIGH,CRITICAL
@@ -269,6 +288,7 @@ jobs:
 
       - name: Upload Trivy report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: trivy-report
