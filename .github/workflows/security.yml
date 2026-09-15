@@ -189,34 +189,60 @@ jobs:
 
           unzip -q "${RUNNER_TEMP}/dc.zip" -d "${RUNNER_TEMP}/dependency-check-cli"
 
+      # Only refresh the NVD database on main pushes and the weekly schedule.
+      # PR/feature-branch runs reuse the cached data as-is (--noupdate),
+      # unless the cache came back essentially empty, in which case we force
+      # a real update so the scan is never run against a dataset with no data.
+      - name: Determine NVD update mode
+        id: update-mode
+        run: |
+          CACHE_SIZE=$(du -sb ~/.owasp-dc-data 2>/dev/null | cut -f1 || echo 0)
+          echo "Cache size before scan: ${CACHE_SIZE} bytes"
+
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            REASON="scheduled/main run"
+            FLAG=""
+          elif [ "$CACHE_SIZE" -lt 50000000 ]; then
+            REASON="cache empty/too small ($CACHE_SIZE bytes)"
+            FLAG=""
+          else
+            REASON="PR/branch run with warm cache"
+            FLAG="--noupdate"
+          fi
+
+          echo "Update mode reason: ${REASON}"
+          echo "flag=${FLAG}" >> "$GITHUB_OUTPUT"
+
       - name: Run OWASP Dependency-Check
         id: dc-scan
         continue-on-error: false
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+          NVD_UPDATE_FLAG: ${{ steps.update-mode.outputs.flag }}
         run: |
           mkdir -p reports ~/.owasp-dc-data
           set +e
           for attempt in 1 2 3; do
-            echo "=== Dependency-Check attempt ${attempt}/3 ==="
-            OUTPUT=$("${RUNNER_TEMP}/dependency-check-cli/dependency-check/bin/dependency-check.sh" \
+            echo "=== Dependency-Check attempt ${attempt}/3 (update flag: '${NVD_UPDATE_FLAG:-<update>}') ==="
+            "${RUNNER_TEMP}/dependency-check-cli/dependency-check/bin/dependency-check.sh" \
               --enableExperimental \
               --disableOssIndex \
               --exclude "**/.git/**" \
               --scan . \
               --format ALL \
-              --nvdApiDelay 6000 \
+              --nvdApiDelay 2000 \
+              ${NVD_UPDATE_FLAG} \
               --project "go-security-test" \
               --out reports \
               --data ~/.owasp-dc-data \
               --failOnCVSS 7 \
-              ${NVD_API_KEY:+--nvdApiKey "$NVD_API_KEY"} 2>&1)
-            STATUS=$?
-            echo "$OUTPUT"
+              ${NVD_API_KEY:+--nvdApiKey "$NVD_API_KEY"} 2>&1 | tee dc-output.log
+            STATUS=${PIPESTATUS[0]}
+
             if [ $STATUS -eq 0 ]; then
               exit 0
             fi
-            if echo "$OUTPUT" | grep -q "vulnerabilities that have a CVSS score greater than or equal to"; then
+            if grep -q "vulnerabilities that have a CVSS score greater than or equal to" dc-output.log; then
               echo "::error::Genuine CVSS threshold breach - not retrying"
               exit $STATUS
             fi
