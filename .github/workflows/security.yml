@@ -198,7 +198,7 @@ jobs:
           set +e
           for attempt in 1 2 3; do
             echo "=== Dependency-Check attempt ${attempt}/3 ==="
-            "${RUNNER_TEMP}/dependency-check-cli/dependency-check/bin/dependency-check.sh" \
+            OUTPUT=$("${RUNNER_TEMP}/dependency-check-cli/dependency-check/bin/dependency-check.sh" \
               --enableExperimental \
               --disableOssIndex \
               --exclude "**/.git/**" \
@@ -209,10 +209,15 @@ jobs:
               --out reports \
               --data ~/.owasp-dc-data \
               --failOnCVSS 7 \
-              ${NVD_API_KEY:+--nvdApiKey "$NVD_API_KEY"}
+              ${NVD_API_KEY:+--nvdApiKey "$NVD_API_KEY"} 2>&1)
             STATUS=$?
+            echo "$OUTPUT"
             if [ $STATUS -eq 0 ]; then
               exit 0
+            fi
+            if echo "$OUTPUT" | grep -q "vulnerabilities that have a CVSS score greater than or equal to"; then
+              echo "::error::Genuine CVSS threshold breach - not retrying"
+              exit $STATUS
             fi
             echo "::warning::Attempt ${attempt} failed with exit code ${STATUS}"
             if [ $attempt -lt 3 ]; then
