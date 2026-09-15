@@ -14,6 +14,7 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
@@ -123,6 +124,7 @@ jobs:
     concurrency:
       group: owasp-dependency-check-nvd
       cancel-in-progress: false
+      queue: max
     steps:
       - name: Checkout
         uses: actions/checkout@v7
