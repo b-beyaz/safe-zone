@@ -121,7 +121,7 @@ jobs:
       contents: read
       security-events: write
     concurrency:
-      group: owasp-dependency-check-${{ github.ref }}
+      group: owasp-dependency-check-nvd
       cancel-in-progress: false
     steps:
       - name: Checkout
