@@ -29,6 +29,9 @@ func main() {
 	// Initialize Database
 	database.InitDB()
 
+	// Bootstrap the first admin user (no-op if already exists or env unset)
+	auth.EnsureAdminUser(os.Getenv("ADMIN_EMAIL"), os.Getenv("ADMIN_PASSWORD"))
+
 	// Initialize Redis
 	cache.InitRedis()
 
@@ -194,21 +197,27 @@ func main() {
 		auth.RequirePermission("gateway:use")(http.HandlerFunc(handlers.NewOpenAIChatGateway(guardrailService))),
 	)
 
-	mux.Handle("POST /patterns", auth.RequirePermission("patterns:admin")(http.HandlerFunc(handlers.CreatePattern)))
-	mux.Handle("GET /patterns", auth.RequirePermission("patterns:admin")(http.HandlerFunc(handlers.ListPatterns)))
-	mux.Handle("DELETE /patterns/{id}", auth.RequirePermission("patterns:admin")(http.HandlerFunc(handlers.DeletePattern)))
+		// GET: token OR any session (admin/viewer). Write: token OR admin session.
+	// See internal/middleware/rbac.go -- CLI/SDK callers (pkg/tsz-cli,
+	// pkg/tszclient-go) keep using tokens; the dashboard frontend uses
+	// sessions instead.
+	mux.Handle("POST /patterns", middleware.RequireWriteAccess("patterns:admin")(http.HandlerFunc(handlers.CreatePattern)))
+	mux.Handle("GET /patterns", middleware.RequireReadAccess("patterns:admin")(http.HandlerFunc(handlers.ListPatterns)))
+	mux.Handle("DELETE /patterns/{id}", middleware.RequireWriteAccess("patterns:admin")(http.HandlerFunc(handlers.DeletePattern)))
+	// Toggle a pattern's IsActive flag only (dashboard enable/disable).
+	mux.Handle("PATCH /patterns/{id}", middleware.RequireWriteAccess("patterns:admin")(http.HandlerFunc(handlers.UpdatePatternActive)))
 
-	mux.Handle("POST /allowlist", auth.RequirePermission("allowlist:admin")(http.HandlerFunc(handlers.CreateAllowlistItem)))
-	mux.Handle("GET /allowlist", auth.RequirePermission("allowlist:admin")(http.HandlerFunc(handlers.ListAllowlistItems)))
-	mux.Handle("DELETE /allowlist/{id}", auth.RequirePermission("allowlist:admin")(http.HandlerFunc(handlers.DeleteAllowlistItem)))
+	mux.Handle("POST /allowlist", middleware.RequireWriteAccess("allowlist:admin")(http.HandlerFunc(handlers.CreateAllowlistItem)))
+	mux.Handle("GET /allowlist", middleware.RequireReadAccess("allowlist:admin")(http.HandlerFunc(handlers.ListAllowlistItems)))
+	mux.Handle("DELETE /allowlist/{id}", middleware.RequireWriteAccess("allowlist:admin")(http.HandlerFunc(handlers.DeleteAllowlistItem)))
 
-	mux.Handle("POST /blacklist", auth.RequirePermission("blacklist:admin")(http.HandlerFunc(handlers.CreateBlacklistItem)))
-	mux.Handle("GET /blacklist", auth.RequirePermission("blacklist:admin")(http.HandlerFunc(handlers.ListBlacklistItems)))
-	mux.Handle("DELETE /blacklist/{id}", auth.RequirePermission("blacklist:admin")(http.HandlerFunc(handlers.DeleteBlacklistItem)))
+	mux.Handle("POST /blacklist", middleware.RequireWriteAccess("blacklist:admin")(http.HandlerFunc(handlers.CreateBlacklistItem)))
+	mux.Handle("GET /blacklist", middleware.RequireReadAccess("blacklist:admin")(http.HandlerFunc(handlers.ListBlacklistItems)))
+	mux.Handle("DELETE /blacklist/{id}", middleware.RequireWriteAccess("blacklist:admin")(http.HandlerFunc(handlers.DeleteBlacklistItem)))
 
-	mux.Handle("POST /validators", auth.RequirePermission("validators:admin")(http.HandlerFunc(handlers.CreateValidator)))
-	mux.Handle("GET /validators", auth.RequirePermission("validators:admin")(http.HandlerFunc(handlers.ListValidators)))
-	mux.Handle("DELETE /validators/{id}", auth.RequirePermission("validators:admin")(http.HandlerFunc(handlers.DeleteValidator)))
+	mux.Handle("POST /validators", middleware.RequireWriteAccess("validators:admin")(http.HandlerFunc(handlers.CreateValidator)))
+	mux.Handle("GET /validators", middleware.RequireReadAccess("validators:admin")(http.HandlerFunc(handlers.ListValidators)))
+	mux.Handle("DELETE /validators/{id}", middleware.RequireWriteAccess("validators:admin")(http.HandlerFunc(handlers.DeleteValidator)))
 
 	// Template Endpoints
 	mux.Handle("POST /templates/import", auth.RequirePermission("templates:admin")(http.HandlerFunc(handlers.ImportTemplateHandler)))
@@ -218,9 +227,16 @@ func main() {
 
 	// Dashboard Endpoints (bkz. issue #16 -- read-only, in-memory metrics)
 
-	mux.Handle("GET /dashboard/summary", auth.RequirePermission("dashboard:read")(http.HandlerFunc(handlers.GetDashboardSummary)))
-	mux.Handle("GET /dashboard/events", auth.RequirePermission("dashboard:read")(http.HandlerFunc(handlers.GetDashboardEvents)))
-	mux.Handle("GET /dashboard/config", auth.RequirePermission("dashboard:read")(http.HandlerFunc(handlers.GetDashboardConfig)))
+	// Dashboard routes are for human users logged in via session
+	// (see /auth/login above), not token-based API callers.
+	mux.Handle("GET /dashboard/summary", middleware.RequireSession(http.HandlerFunc(handlers.GetDashboardSummary)))
+	mux.Handle("GET /dashboard/events", middleware.RequireSession(http.HandlerFunc(handlers.GetDashboardEvents)))
+	mux.Handle("GET /dashboard/config", middleware.RequireSession(http.HandlerFunc(handlers.GetDashboardConfig)))
+	// Dashboard user auth (V3.0) -- session-based, separate from the
+	// token-based machine auth above.
+	mux.HandleFunc("POST /auth/login", handlers.Login)
+	mux.HandleFunc("POST /auth/logout", handlers.Logout)
+	mux.HandleFunc("GET /auth/me", handlers.Me)
 
 	// ===== MILESTONE 1: MIDDLEWARE WRAPPING =====
 	// Wrap mux with middleware (applied in reverse order: last middleware is outermost)
