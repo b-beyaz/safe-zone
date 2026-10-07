@@ -322,8 +322,8 @@ jobs:
         with:
           image-ref: thyris-sz:scan-${{ matrix.variant }}
           version: v0.75.0
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: false
           format: table
           output: trivy-report-${{ matrix.variant }}.txt
           exit-code: ${{ env.ENFORCE_CONTAINER_SCAN == 'true' && '1' || '0' }}
