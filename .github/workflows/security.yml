@@ -197,7 +197,7 @@ jobs:
       - name: Determine NVD update mode
         id: update-mode
         run: |
-          CACHE_SIZE=$(du -sb ~/.owasp-dc-data 2>/dev/null | cut -f1 || echo 0)
+          CACHE_SIZE=$(du -sb ~/.owasp-dc-data 2>/dev/null | cut -f1); CACHE_SIZE=${CACHE_SIZE:-0}
           echo "Cache size before scan: ${CACHE_SIZE} bytes"
 
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
