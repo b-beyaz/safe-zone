@@ -4,7 +4,7 @@ services:
       context: ../..
       dockerfile: deployment/docker/Dockerfile.wolfi
     image: thyris-sz:wolfi
-    container_name: thyris_api
+    container_name: wolfi_thyris_api
     read_only: true
     env_file:
       - path: ../../.env
@@ -26,7 +26,7 @@ services:
 
   db:
     image: postgres:15-alpine
-    container_name: thyris_db
+    container_name: wolfi_thyris_db
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -40,7 +40,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: thyris_redis
+    container_name: wolfi_thyris_redis
     command: redis-server --requirepass thyrisredis
     ports:
       - "6380:6379"
