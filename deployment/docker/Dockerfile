@@ -18,7 +18,7 @@ RUN mkdir -p /out \
     && CGO_ENABLED=0 GOOS=linux go build -o /out/byg-mock-openai ./cmd/byg-mock-openai \
     && CGO_ENABLED=0 GOOS=linux go build -o /out/byg-mock-siem ./cmd/byg-mock-siem
 
-FROM alpine:3.24.2
+FROM alpine:3.24.1
 
 WORKDIR /app
 
